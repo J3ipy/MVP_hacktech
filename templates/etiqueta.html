@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Etiqueta de Patrimônio</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: sans-serif;
+            background-color: #f0f0f0;
+        }
+        .etiqueta {
+            width: 300px;
+            padding: 20px;
+            border: 2px dashed #333;
+            text-align: center;
+            background-color: white;
+        }
+        .etiqueta img {
+            width: 200px;
+            height: 200px;
+            margin-bottom: 15px;
+        }
+        .etiqueta h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.2em;
+        }
+        .etiqueta p {
+            margin: 0;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 1.5em;
+            font-weight: 700;
+            letter-spacing: 2px;
+        }
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        @media print {
+            body { background-color: white; }
+            .print-button { display: none; }
+            .etiqueta { border: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="etiqueta">
+        <h2>{{ nome }}</h2>
+        <img src="{{ qr_code_url }}" alt="QR Code para o ID {{ id }}">
+        <p>{{ id }}</p>
+    </div>
+    <button class="print-button" onclick="window.print()">Imprimir Etiqueta</button>
+</body>
+</html>

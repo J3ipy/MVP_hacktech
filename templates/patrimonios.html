@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Patrimônios</title>
+
+    <!-- Tags para PWA -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#212529">
+    <link rel="apple-touch-icon" href="/static/icons/logo.png">
+
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --success-color: #198754;
+            --error-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #0dcaf0;
+            --light-gray: #f8f9fa;
+            --dark-gray: #212529;
+            --border-radius: 8px;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; background-color: #eef2f7; color: var(--dark-gray); }
+        .header { background-color: var(--dark-gray); color: white; padding: 15px 20px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header h1 { margin: 0; font-size: 1.5em; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 15px; }
+        .card { background-color: white; padding: 25px; border-radius: var(--border-radius); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .controls-container { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }
+        .control-group { flex: 1; min-width: 200px; }
+        .control-group label { font-weight: 600; margin-bottom: 8px; display: block; }
+        .control-group input, .control-group select { width: 100%; padding: 12px; border: 1px solid #ced4da; border-radius: var(--border-radius); font-size: 1rem; box-sizing: border-box; }
+        .table-container { width: 100%; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 15px; border-bottom: 1px solid #dee2e6; text-align: left; vertical-align: middle; white-space: nowrap; }
+        th { background-color: var(--light-gray); font-weight: 600; color: #495057; }
+        tbody tr:hover { background-color: #f1f3f5; }
+        img { width: 70px; height: 70px; object-fit: cover; border-radius: var(--border-radius); }
+        .action-buttons { display: flex; gap: 5px; }
+        .action-buttons button, .action-buttons a { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: 600; text-decoration: none; display: inline-block; }
+        .edit-btn { background-color: var(--warning-color); color: var(--dark-gray); }
+        .delete-btn { background-color: var(--error-color); }
+        .tag-btn { background-color: var(--info-color); }
+        .action-container { text-align: center; margin-top: 30px; }
+        .action-button { background-color: var(--primary-color); color: white; padding: 12px 25px; border: none; border-radius: var(--border-radius); cursor: pointer; text-decoration: none; font-size: 1.1em; font-weight: 600; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(5px); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 30px; border: 1px solid #888; width: 90%; max-width: 500px; border-radius: var(--border-radius); position: relative; animation: slide-down 0.3s ease-out; }
+        @keyframes slide-down { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .close-btn { color: #aaa; position: absolute; top: 10px; right: 20px; font-size: 28px; font-weight: bold; cursor: pointer; }
+
+        /* 👇👇👇 A MÁGICA DA RESPONSIVIDADE ACONTECE AQUI 👇�👇 */
+        @media only screen and (max-width: 768px) {
+            .table-container { overflow-x: hidden; } /* Remove a barra de rolagem horizontal */
+        
+            thead { display: none; } /* Esconde os cabeçalhos da tabela */
+        
+            tr {
+            display: block;
+            margin-bottom: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid #ddd;
+            }
+        
+            td {
+                display: flex;
+                justify-content: space-between; /* Alinha o label e o valor */
+                align-items: center;
+                text-align: right; /* Alinha o texto do valor à direita */
+                border-bottom: 1px solid #eee;
+                white-space: normal;
+            }
+
+            td:last-child { border-bottom: none; }
+        
+            td::before {
+                content: attr(data-label); /* Pega o texto do atributo data-label */
+                font-weight: 600;
+                text-align: left;
+                margin-right: 15px;
+                color: var(--dark-gray);
+            }
+        
+            .action-buttons {
+                justify-content: flex-end; /* Alinha os botões à direita */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="header"><h1>Gestão de Patrimônio</h1></header>
+
+    <div class="container">
+        <div class="card controls-container">
+            <div class="control-group">
+                <label for="search-input">Procurar por Nome</label>
+                <input type="text" id="search-input" placeholder="Digite o nome do item...">
+            </div>
+            <div class="control-group">
+                <label for="category-filter">Filtrar por Categoria</label>
+                <select id="category-filter">
+                    <option value="">Todas as Categorias</option>
+                    <option value="Mobiliário">Mobiliário</option>
+                    <option value="Eletrônico">Eletrônico</option>
+                    <option value="Informática">Informática</option>
+                    <option value="Laboratório">Laboratório</option>
+                    <option value="Outros">Outros</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="card table-container">
+            <table id="patrimonio-table">
+                <thead><tr><th>ID</th><th>Nome</th><th>Categoria</th><th>Local</th><th>Foto</th><th>Ações</th></tr></thead>
+                <tbody>
+                    {% if patrimonios %}
+                        {% for item in patrimonios %}
+                        <tr data-row-num="{{ item.row_num }}">
+                            <td data-label="ID">{{ item.ID_PATRIMONIO }}</td>
+                            <td data-label="Nome">{{ item.NOME_PATRIMONIO }}</td>
+                            <td data-label="Categoria">{{ item.CATEGORIA }}</td>
+                            <td data-label="Local">{{ item.LOCAL }}</td>
+                            <td data-label="Foto">
+                                {% if item.URL_FOTO %}<a href="{{ item.URL_FOTO }}" target="_blank"><img src="{{ item.URL_FOTO }}" alt="Foto de {{ item.NOME_PATRIMONIO }}"></a>{% else %}<span>N/A</span>{% endif %}
+                            </td>
+                            <td data-label="Ações" class="action-buttons">
+                                <button class="edit-btn">Editar</button>
+                                <button class="delete-btn">Excluir</button>
+                                <a class="tag-btn" href="/gerar_etiqueta?id={{ item.ID_PATRIMONIO }}&nome={{ item.NOME_PATRIMONIO }}" target="_blank">Etiqueta</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr><td colspan="6" style="text-align: center; padding: 50px;">Nenhum patrimônio cadastrado ainda.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="action-container">
+            <a href="/" class="action-button">Cadastrar Novo Patrimônio</a>
+        </div>
+    </div>
+
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Editar Patrimônio</h2>
+            <form id="edit-form">
+                <input type="hidden" id="edit-row-num">
+                <div class="form-group"><label for="edit-nome">Nome do Patrimônio</label><input type="text" id="edit-nome" required></div>
+                <div class="form-group">
+                    <label for="edit-categoria">Categoria</label>
+                    <select id="edit-categoria" required>
+                        <option value="Mobiliário">Mobiliário</option>
+                        <option value="Eletrônico">Eletrônico</option>
+                        <option value="Informática">Informática</option>
+                        <option value="Laboratório">Laboratório</option>
+                        <option value="Outros">Outros</option>
+                    </select>
+                </div>
+                <div class="form-group"><label for="edit-local">Local</label><input type="text" id="edit-local" required></div>
+                <div class="form-group">
+                    <label for="edit-foto">Trocar Foto (opcional)</label>
+                    <input type="file" id="edit-foto" accept="image/jpeg, image/png">
+                </div>
+                <button type="submit" class="action-button">Salvar Alterações</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('search-input');
+            const categoryFilter = document.getElementById('category-filter');
+            const tableBody = document.getElementById('patrimonio-table').getElementsByTagName('tbody')[0];
+            
+            function filterTable() {
+                const searchText = searchInput.value.toLowerCase();
+                const categoryValue = categoryFilter.value;
+                const rows = tableBody.getElementsByTagName('tr');
+                for (const row of rows) {
+                    const nome = row.cells[1].textContent.toLowerCase();
+                    const categoria = row.cells[2].textContent;
+                    const matchesSearch = nome.includes(searchText);
+                    const matchesCategory = categoryValue === "" || categoria === categoryValue;
+                    row.style.display = (matchesSearch && matchesCategory) ? "" : "none";
+                }
+            }
+
+            searchInput.addEventListener('keyup', filterTable);
+            categoryFilter.addEventListener('change', filterTable);
+
+            const modal = document.getElementById('edit-modal');
+            const closeBtn = document.querySelector('.close-btn');
+            const editForm = document.getElementById('edit-form');
+            
+            closeBtn.onclick = () => { modal.style.display = "none"; };
+            window.onclick = (event) => { if (event.target == modal) modal.style.display = "none"; };
+            
+            tableBody.addEventListener('click', (event) => {
+                const target = event.target;
+                const row = target.closest('tr');
+                if (!row) return;
+
+                if (target.classList.contains('delete-btn')) {
+                    const nome = row.cells[1].textContent;
+                    const rowNum = row.getAttribute('data-row-num');
+                    if (confirm(`Tem certeza que deseja excluir o item "${nome}"?`)) {
+                        fetch('/api/patrimonio/deletar', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ row_num: rowNum })
+                        })
+                        .then(res => res.json())
+                        .then(data => {
+                            alert(data.message);
+                            if (data.success) row.remove();
+                        });
+                    }
+                }
+                
+                if (target.classList.contains('edit-btn')) {
+                    document.getElementById('edit-row-num').value = row.getAttribute('data-row-num');
+                    document.getElementById('edit-nome').value = row.cells[1].textContent;
+                    document.getElementById('edit-categoria').value = row.cells[2].textContent;
+                    document.getElementById('edit-local').value = row.cells[3].textContent;
+                    modal.style.display = "block";
+                }
+            });
+
+            editForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const formData = new FormData();
+                formData.append('row_num', document.getElementById('edit-row-num').value);
+                formData.append('nome', document.getElementById('edit-nome').value);
+                formData.append('categoria', document.getElementById('edit-categoria').value);
+                formData.append('local', document.getElementById('edit-local').value);
+                
+                const fotoInput = document.getElementById('edit-foto');
+                if (fotoInput.files.length > 0) {
+                    formData.append('foto', fotoInput.files[0]);
+                }
+
+                fetch('/api/patrimonio/editar', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    alert(data.message);
+                    if (data.success) {
+                        modal.style.display = "none";
+                        location.reload();
+                    }
+                });
+            });
+        });
+    </script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js').then(registration => {
+            console.log('ServiceWorker registrado com sucesso: ', registration.scope);
+          }).catch(error => {
+            console.log('Falha ao registrar o ServiceWorker: ', error);
+          });
+        });
+      }
+    </script>
+</body>
+</html>
