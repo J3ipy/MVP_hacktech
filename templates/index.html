@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cadastrar Patrimônio</title>
+    <title>Gestão de Patrimônio</title>
     
-    <!-- Tags para PWA -->
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#212529">
     <link rel="apple-touch-icon" href="/static/icons/logo.png">
@@ -14,6 +13,7 @@
         :root {
             --primary-color: #0d6efd;
             --success-color: #198754;
+            --secondary-color: #6c757d;
             --error-color: #dc3545;
             --light-gray: #f8f9fa;
             --dark-gray: #212529;
@@ -39,23 +39,23 @@
             padding: 25px;
             border-radius: var(--border-radius);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
         .hidden { display: none; }
         .form-group { margin-bottom: 1rem; }
+        h2 { text-align: center; margin-top: 0; color: var(--dark-gray); border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 25px;}
         label {
             font-weight: 600;
             color: #495057;
             display: block;
             margin-bottom: 8px;
         }
-        input[type="text"], input[type="url"], input[type="file"], select {
+        input[type="text"], input[type="url"], input[type="file"], select, button {
             width: 100%;
             padding: 12px;
             border: 1px solid #ced4da;
             border-radius: var(--border-radius);
             box-sizing: border-box;
-            transition: border-color .15s ease-in-out, box-shadow .15s ease-in-out;
             font-size: 1rem;
         }
         input:focus, select:focus {
@@ -67,26 +67,21 @@
         button {
             background-color: var(--primary-color);
             color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            width: 100%;
-            font-size: 1.1em;
             font-weight: 600;
+            cursor: pointer;
             transition: background-color .15s ease-in-out;
+            border-color: var(--primary-color);
             position: relative;
             display: flex;
             justify-content: center;
             align-items: center;
         }
-        button:hover { background-color: #0b5ed7; }
+        button.secondary { background-color: var(--secondary-color); border-color: var(--secondary-color); }
+        button:hover { filter: brightness(1.1); }
         .spinner {
-            display: none;
-            width: 20px; height: 20px;
+            display: none; width: 20px; height: 20px;
             border: 3px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top-color: #fff;
+            border-radius: 50%; border-top-color: #fff;
             animation: spin 1s ease-in-out infinite;
         }
         button.loading .spinner { display: block; }
@@ -95,6 +90,18 @@
         .link-container { text-align: center; margin-top: 20px; }
         .link-container a { color: var(--primary-color); text-decoration: none; font-weight: 600; }
         #qr-reader { border-radius: var(--border-radius); overflow: hidden; }
+        .qr-output { text-align: center; margin-top: 20px; }
+        #qr-canvas { border: 1px solid #eee; border-radius: var(--border-radius); }
+        .download-link {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: var(--success-color);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+        }
         #status-message {
             text-align: center; font-size: 1.1em; font-weight: 600;
             padding: 15px; border-radius: var(--border-radius);
@@ -110,7 +117,21 @@
     </header>
 
     <div class="container">
+        <div id="generator-section" class="card">
+            <h2>1. Gerar Nova Etiqueta</h2>
+            <div class="form-group">
+                <label for="qr-text">ID ou Texto para o QR Code</label>
+                <input type="text" id="qr-text" placeholder="Ex: 12469207 ou NTB-01-LAB3">
+            </div>
+            <button id="generate-btn" class="secondary">Gerar QR Code</button>
+            <div class="qr-output">
+                <canvas id="qr-canvas"></canvas>
+                <a id="download-link" class="download-link hidden" href="#" download="qrcode.png">Baixar QR Code</a>
+            </div>
+        </div>
+
         <div id="scanner-section" class="card">
+            <h2>2. Registrar Patrimônio</h2>
             <div id="qr-reader"></div>
             <p style="text-align: center; color: #6c757d; margin-top: 15px; font-weight: 500;">Aponte a câmera para o QR Code</p>
         </div>
@@ -157,8 +178,36 @@
     </div>
 
     <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- LÓGICA DO NOVO GERADOR DE QR CODE ---
+            const generateBtn = document.getElementById('generate-btn');
+            const qrTextInput = document.getElementById('qr-text');
+            const qrCanvas = document.getElementById('qr-canvas');
+            const downloadLink = document.getElementById('download-link');
+
+            generateBtn.addEventListener('click', () => {
+                const text = qrTextInput.value.trim();
+                if (!text) {
+                    alert('Por favor, digite um texto ou ID para gerar o QR Code.');
+                    return;
+                }
+                new QRious({
+                    element: qrCanvas,
+                    value: text,
+                    size: 250,
+                    padding: 10,
+                    background: 'white',
+                    foreground: 'black'
+                });
+                downloadLink.href = qrCanvas.toDataURL('image/png');
+                downloadLink.classList.remove('hidden');
+            });
+
+            // --- LÓGICA JÁ EXISTENTE DO SCANNER E FORMULÁRIO ---
             const scannerSection = document.getElementById('scanner-section');
             const cadastroForm = document.getElementById('cadastro-form');
             const statusMessage = document.getElementById('status-message');
@@ -219,6 +268,7 @@
             });
         });
     </script>
+    
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
