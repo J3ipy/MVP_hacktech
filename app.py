@@ -22,9 +22,9 @@ os.makedirs(QR_CODE_FOLDER, exist_ok=True)
 # --- Configuração do Cloudinary ---
 # IMPORTANTE: No deploy, substitua estes valores por Variáveis de Ambiente!
 cloudinary.config(
-  cloud_name = "j3ipy",
-  api_key = "235846317887343",
-  api_secret = "y4Z2Kla3rFxQXYOwlYV8j6Jd83A"
+  cloud_name = os.environ.get('CLOUD_NAME'),
+  api_key = os.environ.get('API_KEY'),
+  api_secret = os.environ.get('API_SECRET')
 )
 
 # --- Conexão com Google Sheets ---
