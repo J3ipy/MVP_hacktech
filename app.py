@@ -182,7 +182,11 @@ def api_login():
     password = data.get('password')
     
     try:
+        # CORREÇÃO: Usamos find() e verificamos se o resultado não é None
         cell = users_sheet.find(email, in_column=3)
+        if cell is None:
+             return jsonify({"success": False, "message": "E-mail ou senha incorretos."}), 401
+
         user_row = users_sheet.row_values(cell.row)
         stored_hash = user_row[3]
 
@@ -193,8 +197,10 @@ def api_login():
             return jsonify({"success": True, "message": "Login bem-sucedido!"})
         else:
             return jsonify({"success": False, "message": "E-mail ou senha incorretos."}), 401
-    except gspread.exceptions.CellNotFound:
-        return jsonify({"success": False, "message": "E-mail ou senha incorretos."}), 401
+    except gspread.exceptions.APIError as e:
+        print(f"Erro de API do gspread no login: {e}")
+        return jsonify({"success": False, "message": "Erro ao comunicar com o banco de dados."}), 500
+
 
 @app.route('/api/logout', methods=['POST'])
 @login_required
