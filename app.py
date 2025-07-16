@@ -14,29 +14,35 @@ import qrcode
 
 # --- Configurações Iniciais ---
 app = Flask(__name__, static_folder='static')
-# Chave secreta para gerenciar sessões. É crucial para a segurança.
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "uma-chave-secreta-longa-e-dificil-de-adivinhar")
-CORS(app, supports_credentials=True)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
+# Configuração de CORS para permitir cookies da sua URL do Netlify
+CORS(app, resources={r"/api/*": {"origins": "https://patrimonio-ifs.netlify.app"}}, supports_credentials=True)
 
 # --- Configuração do Login ---
 login_manager = LoginManager()
 login_manager.init_app(app)
-# Se um usuário não logado tentar acessar uma página protegida, ele será redirecionado para a rota 'login_page'.
-login_manager.login_view = 'login_page'
+login_manager.login_view = 'login_page' # Redireciona para a rota de login
 
 # --- Configuração do Banco de Dados (Google Sheets) ---
+patrimonio_sheet = None
+users_sheet = None
 try:
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     creds_path = os.path.join(os.path.dirname(__file__), 'credentials.json')
     creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
     client = gspread.authorize(creds)
-    patrimonio_sheet = client.open("Controle_Patrimonio_IFS").worksheet("patrimonios")
-    users_sheet = client.open("Controle_Patrimonio_IFS").worksheet("users")
-    print("Backend conectado com sucesso às planilhas!")
+    
+    # Tentativa de abrir as duas planilhas
+    spreadsheet = client.open("Controle_Patrimonio_IFS")
+    patrimonio_sheet = spreadsheet.worksheet("patrimonios")
+    users_sheet = spreadsheet.worksheet("users")
+    
+    print("Backend conectado com sucesso às planilhas 'patrimonios' e 'users'!")
+
+except gspread.exceptions.WorksheetNotFound as e:
+    print(f"ERRO CRÍTICO: A aba '{e.args[0]}' não foi encontrada na sua planilha do Google Sheets. Verifique o nome.")
 except Exception as e:
-    print(f"ERRO ao conectar com a planilha: {e}")
-    patrimonio_sheet = None
-    users_sheet = None
+    print(f"ERRO CRÍTICO ao conectar com a planilha: {e}")
 
 # --- Configuração do Cloudinary ---
 cloudinary.config(
@@ -45,7 +51,7 @@ cloudinary.config(
   api_secret=os.environ.get('API_SECRET')
 )
 
-# --- Modelo de Usuário para Flask-Login ---
+# --- Modelo de Usuário e Autenticação ---
 class User(UserMixin):
     def __init__(self, user_data):
         self.id = user_data.get('id')
@@ -67,7 +73,6 @@ def load_user(user_id):
     except (gspread.exceptions.CellNotFound, IndexError):
         return None
 
-# --- Configuração do Login Social com Google ---
 google_bp = make_google_blueprint(
     client_id=os.environ.get("GOOGLE_CLIENT_ID"),
     client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
@@ -76,12 +81,11 @@ google_bp = make_google_blueprint(
 )
 app.register_blueprint(google_bp, url_prefix="/login")
 
-# --- Funções Auxiliares ---
 def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- Rotas para Servir as Páginas HTML ---
+# --- ROTAS PARA SERVIR O FRONTEND (Arquitetura "Tudo no Render") ---
 @app.route('/')
 @login_required
 def index():
@@ -90,11 +94,11 @@ def index():
 @app.route('/patrimonios')
 @login_required
 def patrimonios_page():
-    if not patrimonio_sheet: return "Erro de conexão com o banco de dados.", 500
+    if not patrimonio_sheet: return "Erro de conexão com a planilha 'patrimonios'. Verifique os logs do servidor.", 500
     lista_de_patrimonios = patrimonio_sheet.get_all_records()
     for i, item in enumerate(lista_de_patrimonios):
         item['row_num'] = i + 2
-    return render_template('patrimonios.html', patrimonios=lista_de_patrimonios, current_user=current_user)
+    return render_template('patrimonios.html', patrimonios=lista_de_patrimonios)
 
 @app.route('/login')
 def login_page():
