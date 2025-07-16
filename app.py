@@ -20,18 +20,19 @@ app = Flask(__name__, static_folder='static')
 # Aplicação atrás de proxy (Render)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "mude-esta-chave-urgente")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
+
 app.config.update(
     SERVER_NAME=os.environ.get("SERVER_NAME", "api-patrimonio-ifs.onrender.com"),
     PREFERRED_URL_SCHEME="https",
     FRONTEND_URL=os.environ.get("FRONTEND_URL", "https://patrimonio-ifs.netlify.app"),
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="None"
+    SESSION_COOKIE_SAMESITE="None" 
 )
-# CORS para permitir cookies da SPA
-auth_origins = [app.config['FRONTEND_URL']]
-CORS(app, supports_credentials=True, origins=auth_origins)
+
+
+CORS(app, supports_credentials=True, origins=[app.config['FRONTEND_URL']])
 
 # --- Login Manager ---
 login_manager = LoginManager(app)
