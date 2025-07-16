@@ -26,11 +26,10 @@ app.config.update(
     FRONTEND_URL=os.environ.get("FRONTEND_URL", "https://patrimonio-ifs.netlify.app"),
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='None',
-    SESSION_COOKIE_DOMAIN=os.environ.get("COOKIE_DOMAIN", ".netlify.app")
+    SESSION_COOKIE_SAMESITE='None'
 )
 
-CORS(app, supports_credentials=True, origins=[app.config['FRONTEND_URL']])
+CORS(app, supports_credentials=True, origins=[app.config['FRONTEND_URL']])(app, supports_credentials=True, origins=[app.config['FRONTEND_URL']])
 
 # --- Login Manager ---
 login_manager = LoginManager(app)
