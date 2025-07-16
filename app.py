@@ -1,5 +1,6 @@
-# app.py - Versão Final e Consolidada para Deploy no Render
+# app.py - Versão Final e Consolidada para Deploy com API e CORS
 from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask_cors import CORS # 👈 1. IMPORTE A BIBLIOTECA
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
@@ -14,8 +15,8 @@ STATIC_FOLDER = 'static'
 QR_CODE_FOLDER = os.path.join(STATIC_FOLDER, 'qrcodes')
 
 app = Flask(__name__, static_folder=STATIC_FOLDER)
+CORS(app) # 👈 2. ATIVE O CORS PARA TODA A APLICAÇÃO
 
-# Garante que a pasta de QR Codes exista (importante para a geração de etiquetas)
 os.makedirs(QR_CODE_FOLDER, exist_ok=True)
 
 # --- Configuração do Cloudinary (Lendo do Ambiente do Servidor) ---
@@ -39,109 +40,90 @@ except Exception as e:
     sheet = None
 
 def allowed_file(filename):
-    """Verifica se a extensão do arquivo de imagem é permitida."""
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- Rotas para Servir as Páginas HTML ---
-@app.route('/')
-def index():
-    """Renderiza a página inicial."""
-    return render_template('index.html')
+# --- ROTAS DA API ---
 
-@app.route('/patrimonios')
-def patrimonios_page():
-    """Busca os dados e renderiza a página de listagem."""
-    if not sheet: return "Erro de conexão com o banco de dados.", 500
+# NOVO ENDPOINT DE API PARA LISTAR OS ITENS
+@app.route('/api/patrimonios', methods=['GET'])
+def get_patrimonios():
+    if not sheet: return jsonify({"error": "Erro de conexão com o banco de dados."}), 500
     lista_de_patrimonios = sheet.get_all_records()
-    # Adiciona o número da linha para facilitar a edição/deleção no frontend
     for i, item in enumerate(lista_de_patrimonios):
-        item['row_num'] = i + 2
-    return render_template('patrimonios.html', patrimonios=lista_de_patrimonios)
+        item['row_num'] = i + 2 # Adiciona o número da linha para facilitar edições
+    return jsonify(lista_de_patrimonios)
 
-@app.route('/gerar_etiqueta')
-def gerar_etiqueta():
-    """Gera e renderiza a página da etiqueta para impressão."""
-    patrimonio_id = request.args.get('id', 'ERRO')
-    nome = request.args.get('nome', 'Item sem nome')
-    
-    qr_code_filename = f"{secure_filename(patrimonio_id)}.png"
-    qr_code_filepath = os.path.join(QR_CODE_FOLDER, qr_code_filename)
-    
-    # Gera o QR code apenas se ele ainda não existir
-    if not os.path.exists(qr_code_filepath):
-        qr_img = qrcode.make(patrimonio_id)
-        qr_img.save(qr_code_filepath)
-    
-    return render_template('etiqueta.html', 
-                           nome=nome, 
-                           id=patrimonio_id, 
-                           qr_code_url=f'/{QR_CODE_FOLDER}/{qr_code_filename}')
-
-@app.route('/service-worker.js')
-def service_worker():
-    """Serve o arquivo do service worker para o PWA."""
-    return send_from_directory(app.static_folder, 'service-worker.js')
-
-# --- API com Funcionalidades CRUD ---
 @app.route('/api/registrar', methods=['POST'])
 def registrar_patrimonio():
-    if not sheet: return jsonify({"success": False, "message": "Erro de conexão com a planilha."}), 500
-    
+    if not sheet: return jsonify({"success": False, "message": "Erro de conexão."}), 500
     data = request.form
     if not all([data.get('id'), data.get('nome'), data.get('categoria'), data.get('local')]):
         return jsonify({"success": False, "message": "Todos os campos são obrigatórios."}), 400
-
     foto_url = ''
     if 'foto' in request.files:
         file = request.files['foto']
         if file and allowed_file(file.filename):
-            # Envia para o Cloudinary e pega a URL segura
             upload_result = cloudinary.uploader.upload(file)
             foto_url = upload_result['secure_url']
-
-    nova_linha = [
-        data.get('id'), data.get('nome'), data.get('categoria'), 
-        data.get('local'), foto_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ]
+    nova_linha = [data.get('id'), data.get('nome'), data.get('categoria'), data.get('local'), foto_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
     sheet.append_row(nova_linha)
     return jsonify({"success": True, "message": f"Patrimônio '{data.get('nome')}' registrado!"})
 
 @app.route('/api/patrimonio/editar', methods=['POST'])
 def editar_patrimonio():
     if not sheet: return jsonify({"success": False, "message": "Erro de conexão."}), 500
-    
     data = request.form
     row_num = int(data.get('row_num'))
-    
     try:
-        # Atualiza os dados de texto
         sheet.update_cell(row_num, 2, data.get('nome'))
         sheet.update_cell(row_num, 3, data.get('categoria'))
         sheet.update_cell(row_num, 4, data.get('local'))
-        
-        # Se uma nova foto for enviada, atualiza a URL
         if 'foto' in request.files:
             file = request.files['foto']
             if file and allowed_file(file.filename):
                 upload_result = cloudinary.uploader.upload(file)
                 sheet.update_cell(row_num, 5, upload_result['secure_url'])
-
-        return jsonify({"success": True, "message": "Patrimônio atualizado com sucesso!"})
+        return jsonify({"success": True, "message": "Patrimônio atualizado!"})
     except Exception as e:
         return jsonify({"success": False, "message": f"Erro ao atualizar: {e}"}), 500
 
 @app.route('/api/patrimonio/deletar', methods=['POST'])
 def deletar_patrimonio():
     if not sheet: return jsonify({"success": False, "message": "Erro de conexão."}), 500
-    
     try:
         row_num = int(request.json.get('row_num'))
         sheet.delete_rows(row_num)
-        return jsonify({"success": True, "message": "Patrimônio deletado com sucesso!"})
+        return jsonify({"success": True, "message": "Patrimônio deletado!"})
     except Exception as e:
         return jsonify({"success": False, "message": f"Erro ao deletar: {e}"}), 500
 
-# Esta linha é necessária para o gunicorn do Render funcionar
+# Rota para gerar a etiqueta (não é uma API, renderiza um template)
+@app.route('/gerar_etiqueta')
+def gerar_etiqueta():
+    patrimonio_id = request.args.get('id', 'ERRO')
+    nome = request.args.get('nome', 'Item sem nome')
+    qr_code_filename = f"{secure_filename(patrimonio_id)}.png"
+    qr_code_filepath = os.path.join(QR_CODE_FOLDER, qr_code_filename)
+    if not os.path.exists(qr_code_filepath):
+        qrcode.make(patrimonio_id).save(qr_code_filepath)
+    return render_template('etiqueta.html', nome=nome, id=patrimonio_id, qr_code_url=f'/static/qrcodes/{qr_code_filename}')
+
+# Rota para o PWA
+@app.route('/service-worker.js')
+def service_worker():
+    return send_from_directory(app.static_folder, 'service-worker.js')
+
+# --- Rota Catch-all para servir o Frontend ---
+# No deploy final, o Netlify/Vercel cuida disso. Isso é para manter o Render funcionando sozinho.
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def catch_all(path):
+    # Se o caminho for para uma página específica, serve ela.
+    if path == "patrimonios":
+        return render_template("patrimonios.html")
+    # Para qualquer outra coisa, serve a página principal.
+    return render_template("index.html")
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
