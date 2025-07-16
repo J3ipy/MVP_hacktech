@@ -16,7 +16,7 @@ import qrcode
 app = Flask(__name__, static_folder='static')
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
 # Configuração de CORS para permitir cookies da sua URL do Netlify
-CORS(app, resources={r"/api/*": {"origins": "https://patrimonio-ifs.netlify.app"}}, supports_credentials=True)
+CORS(app, origins=[os.environ.get("FRONTEND_URL", "http://localhost:3000")], supports_credentials=True)
 
 # --- Configuração do Login ---
 login_manager = LoginManager()
@@ -130,10 +130,13 @@ def gerar_etiqueta():
 # --- Rotas da API e Autenticação ---
 @app.route("/login/google/authorized")
 def google_authorized():
+    frontend_url = os.environ.get("FRONTEND_URL")
+    if not frontend_url:
+        return "ERRO: A variável de ambiente FRONTEND_URL não está configurada no servidor.", 500
+
     if not google.authorized:
         # Se falhar, redireciona para a página de login do frontend
-        frontend_login_url = os.environ.get("FRONTEND_URL", "") + "/login.html"
-        return redirect(frontend_login_url)
+        return redirect(frontend_url + "/login.html")
     
     resp = google.get("/oauth2/v2/userinfo")
     if not resp.ok:
@@ -142,12 +145,12 @@ def google_authorized():
     user_info = resp.json()
     user_email = user_info["email"]
 
-    # Lógica para encontrar ou criar o usuário na planilha (seu código aqui está correto)
+    # Lógica para encontrar ou criar o usuário na planilha
     try:
         cell = users_sheet.find(user_email, in_column=3)
         user_data_list = users_sheet.row_values(cell.row)
         user_data = {'id': user_data_list[0], 'nome': user_data_list[1], 'email': user_data_list[2], 'profile_pic': user_data_list[4]}
-    except gspread.exceptions.CellNotFound:
+    except (gspread.exceptions.CellNotFound, AttributeError):
         new_id = f"user_{len(users_sheet.get_all_records()) + 1}"
         user_data = {"id": new_id, "nome": user_info.get("name"), "email": user_email, "password_hash": "", "profile_pic": user_info.get("picture"), "provider": "google"}
         users_sheet.append_row(list(user_data.values()))
@@ -157,8 +160,8 @@ def google_authorized():
     login_user(user)
     
     # Redireciona DIRETAMENTE para a página principal do seu frontend
-    frontend_url = os.environ.get("FRONTEND_URL", "/")
     return redirect(frontend_url)
+
 
 @app.route('/api/register', methods=['POST'])
 def api_register():
