@@ -82,7 +82,8 @@ google_bp = make_google_blueprint(
     client_id=os.environ.get("GOOGLE_CLIENT_ID"),
     client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
     scope=["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"],
-    redirect_url="/login/google/authorized"
+    redirect_url="/login/google/authorized",
+    state=None
 )
 # Callback customizado antes de registrar o blueprint
 @google_bp.route('/google/authorized')
