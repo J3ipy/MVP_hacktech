@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro - Controle de Patrimônio</title>
+    <link rel="shortcut icon" href="/static/icons/logo.png" type="image/png">
+    <style>
+        :root { --primary-color: #0d6efd; --success-color: #198754; --error-color: #dc3545; --light-gray: #f8f9fa; --dark-gray: #212529; --border-radius: 8px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; background-color: #eef2f7; color: var(--dark-gray); display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .container { max-width: 400px; width: 100%; padding: 0 15px; }
+        .card { background-color: white; padding: 30px; border-radius: var(--border-radius); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h2 { text-align: center; margin-top: 0; margin-bottom: 1.5rem; color: var(--dark-gray); }
+        .form-group { margin-bottom: 1.25rem; }
+        label { font-weight: 600; color: #495057; display: block; margin-bottom: 8px; }
+        input[type="text"], input[type="email"], input[type="password"], button { width: 100%; padding: 12px; border: 1px solid #ced4da; border-radius: var(--border-radius); box-sizing: border-box; font-size: 1rem; }
+        input:focus { border-color: var(--primary-color); outline: 0; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); }
+        button { background-color: var(--primary-color); color: white; font-weight: 600; cursor: pointer; transition: background-color .15s ease-in-out; border: none; }
+        .link-container { text-align: center; margin-top: 20px; }
+        .link-container a { color: var(--primary-color); text-decoration: none; font-weight: 600; }
+        #status-message { text-align: center; font-size: 1em; font-weight: 600; padding: 15px; border-radius: var(--border-radius); margin-top: 20px; }
+        .status-success { color: var(--success-color); background-color: #d1e7dd; border: 1px solid #badbcc; }
+        .status-error { color: var(--error-color); background-color: #f8d7da; border: 1px solid #f5c2c7; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h2>Criar Conta</h2>
+            <form id="register-form">
+                <div class="form-group"><label for="nome">Nome Completo</label><input type="text" id="nome" required></div>
+                <div class="form-group"><label for="email">E-mail</label><input type="email" id="email" required></div>
+                <div class="form-group"><label for="password">Senha</label><input type="password" id="password" required></div>
+                <button type="submit">Registrar</button>
+            </form>
+            <p class="link-container">Já tem uma conta? <a href="/login">Faça o login</a></p>
+        </div>
+        <div id="status-message" class="hidden"></div>
+    </div>
+    <script>
+        document.getElementById('register-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const statusMessage = document.getElementById('status-message');
+            const nome = document.getElementById('nome').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nome, email, password }),
+                });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    alert('Registro bem-sucedido! Você será redirecionado para a página de login.');
+                    window.location.href = '/login';
+                } else {
+                    statusMessage.textContent = `Erro: ${result.message}`;
+                    statusMessage.className = 'status-error';
+                    statusMessage.classList.remove('hidden');
+                }
+            } catch (error) {
+                statusMessage.textContent = 'Erro de conexão com o servidor.';
+                statusMessage.className = 'status-error';
+                statusMessage.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
