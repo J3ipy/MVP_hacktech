@@ -79,13 +79,14 @@ google_bp = make_google_blueprint(
     scope=["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"],
     redirect_url="/login/google/authorized"
 )
-# Callback personalizado
-@google_bp.route('/google/authorized')
-def google_authorized():
+app.register_blueprint(google_bp, url_prefix="/login")
+
+# Callback de OAuth substituindo o listener padrão do Flask-Dance
+@app.route('/login/google/authorized')
+def custom_google_authorized():
     frontend = app.config['FRONTEND_URL']
-    # Sincroniza state manual para CSRF
-    state = request.args.get('state')
-    session[f"{google_bp.name}_oauth_state"] = state
+    # tenta buscar o token do Google manualmente
+    from flask_dance.consumer import oauth_authorized
     if not google.authorized:
         return redirect(f"{frontend}/login.html?error=auth_failed")
     resp = google.get('/oauth2/v2/userinfo')
@@ -103,10 +104,7 @@ def google_authorized():
         users_sheet.append_row([data['id'], data['nome'], data['email'], '', data['profile_pic'], 'google'])
     user = User(data)
     login_user(user)
-    session.pop('next', None)
     return redirect(frontend)
-
-app.register_blueprint(google_bp, url_prefix="/login")
 
 # --- Auxiliares ---
 def allowed_file(fn):
