@@ -19,6 +19,11 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
 # Configuração de CORS para permitir cookies da sua URL do Netlify
+app.config.update(
+    SESSION_COOKIE_SECURE=True,  # Garante que o cookie só é enviado sobre HTTPS
+    SESSION_COOKIE_HTTPONLY=True, # Previne acesso ao cookie via JavaScript
+    SESSION_COOKIE_SAMESITE='None', # Permite que o cookie seja enviado de Netlify para Render
+)
 CORS(app, origins=[os.environ.get("FRONTEND_URL", "http://localhost:3000")], supports_credentials=True)
 
 
