@@ -1,4 +1,4 @@
-# app.py - Versão Final com Cloudinary, PWA e Geração de Etiqueta
+# app.py - Versão Final e Consolidada para Deploy no Render
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -10,17 +10,15 @@ import cloudinary
 import cloudinary.uploader
 
 # --- Configurações Iniciais ---
-# A pasta 'uploads' local não é mais necessária para o deploy, mas pode ser mantida para testes.
 STATIC_FOLDER = 'static'
 QR_CODE_FOLDER = os.path.join(STATIC_FOLDER, 'qrcodes')
 
 app = Flask(__name__, static_folder=STATIC_FOLDER)
 
-# Garante que a pasta de QR Codes exista
+# Garante que a pasta de QR Codes exista (importante para a geração de etiquetas)
 os.makedirs(QR_CODE_FOLDER, exist_ok=True)
 
-# --- Configuração do Cloudinary ---
-# IMPORTANTE: No deploy, substitua estes valores por Variáveis de Ambiente!
+# --- Configuração do Cloudinary (Lendo do Ambiente do Servidor) ---
 cloudinary.config(
   cloud_name = os.environ.get('CLOUD_NAME'),
   api_key = os.environ.get('API_KEY'),
@@ -45,27 +43,32 @@ def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- Rotas Principais e de PWA ---
+# --- Rotas para Servir as Páginas HTML ---
 @app.route('/')
 def index():
+    """Renderiza a página inicial."""
     return render_template('index.html')
 
 @app.route('/patrimonios')
-def listar_patrimonios():
+def patrimonios_page():
+    """Busca os dados e renderiza a página de listagem."""
     if not sheet: return "Erro de conexão com o banco de dados.", 500
     lista_de_patrimonios = sheet.get_all_records()
+    # Adiciona o número da linha para facilitar a edição/deleção no frontend
     for i, item in enumerate(lista_de_patrimonios):
         item['row_num'] = i + 2
     return render_template('patrimonios.html', patrimonios=lista_de_patrimonios)
 
 @app.route('/gerar_etiqueta')
 def gerar_etiqueta():
+    """Gera e renderiza a página da etiqueta para impressão."""
     patrimonio_id = request.args.get('id', 'ERRO')
     nome = request.args.get('nome', 'Item sem nome')
     
     qr_code_filename = f"{secure_filename(patrimonio_id)}.png"
     qr_code_filepath = os.path.join(QR_CODE_FOLDER, qr_code_filename)
     
+    # Gera o QR code apenas se ele ainda não existir
     if not os.path.exists(qr_code_filepath):
         qr_img = qrcode.make(patrimonio_id)
         qr_img.save(qr_code_filepath)
@@ -77,12 +80,13 @@ def gerar_etiqueta():
 
 @app.route('/service-worker.js')
 def service_worker():
+    """Serve o arquivo do service worker para o PWA."""
     return send_from_directory(app.static_folder, 'service-worker.js')
 
-# --- API com funcionalidades CRUD ---
+# --- API com Funcionalidades CRUD ---
 @app.route('/api/registrar', methods=['POST'])
 def registrar_patrimonio():
-    if not sheet: return jsonify({"success": False, "message": "Erro de conexão."}), 500
+    if not sheet: return jsonify({"success": False, "message": "Erro de conexão com a planilha."}), 500
     
     data = request.form
     if not all([data.get('id'), data.get('nome'), data.get('categoria'), data.get('local')]):
@@ -92,6 +96,7 @@ def registrar_patrimonio():
     if 'foto' in request.files:
         file = request.files['foto']
         if file and allowed_file(file.filename):
+            # Envia para o Cloudinary e pega a URL segura
             upload_result = cloudinary.uploader.upload(file)
             foto_url = upload_result['secure_url']
 
@@ -110,17 +115,19 @@ def editar_patrimonio():
     row_num = int(data.get('row_num'))
     
     try:
+        # Atualiza os dados de texto
         sheet.update_cell(row_num, 2, data.get('nome'))
         sheet.update_cell(row_num, 3, data.get('categoria'))
         sheet.update_cell(row_num, 4, data.get('local'))
         
+        # Se uma nova foto for enviada, atualiza a URL
         if 'foto' in request.files:
             file = request.files['foto']
             if file and allowed_file(file.filename):
                 upload_result = cloudinary.uploader.upload(file)
                 sheet.update_cell(row_num, 5, upload_result['secure_url'])
 
-        return jsonify({"success": True, "message": "Patrimônio atualizado!"})
+        return jsonify({"success": True, "message": "Patrimônio atualizado com sucesso!"})
     except Exception as e:
         return jsonify({"success": False, "message": f"Erro ao atualizar: {e}"}), 500
 
@@ -131,9 +138,10 @@ def deletar_patrimonio():
     try:
         row_num = int(request.json.get('row_num'))
         sheet.delete_rows(row_num)
-        return jsonify({"success": True, "message": "Patrimônio deletado!"})
+        return jsonify({"success": True, "message": "Patrimônio deletado com sucesso!"})
     except Exception as e:
         return jsonify({"success": False, "message": f"Erro ao deletar: {e}"}), 500
 
+# Esta linha é necessária para o gunicorn do Render funcionar
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
