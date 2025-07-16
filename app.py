@@ -156,6 +156,7 @@ def google_authorized():
 @app.route('/api/register', methods=['POST'])
 def api_register():
     if not users_sheet: return jsonify({"success": False, "message": "Erro de conexão com o banco de dados."}), 500
+    
     data = request.json
     email = data.get('email')
     nome = data.get('nome')
@@ -164,42 +165,44 @@ def api_register():
     if not all([email, nome, password]):
         return jsonify({"success": False, "message": "Todos os campos são obrigatórios."}), 400
     
-    try:
-        users_sheet.find(email, in_column=3)
+    # Verifica se o e-mail já existe ANTES do bloco try
+    cell = users_sheet.find(email, in_column=3)
+    if cell is not None:
         return jsonify({"success": False, "message": "Este e-mail já está cadastrado."}), 409
-    except gspread.exceptions.CellNotFound:
-        password_hash = generate_password_hash(password)
-        new_id = f"user_{len(users_sheet.get_all_records()) + 1}"
-        new_user_row = [new_id, nome, email, password_hash, "", "email"]
-        users_sheet.append_row(new_user_row)
-        return jsonify({"success": True, "message": "Usuário registrado com sucesso!"})
+
+    # Se o e-mail não existe, prossegue para criar o novo usuário
+    password_hash = generate_password_hash(password)
+    new_id = f"user_{len(users_sheet.get_all_records()) + 1}"
+    new_user_row = [new_id, nome, email, password_hash, "", "email"]
+    users_sheet.append_row(new_user_row)
+    return jsonify({"success": True, "message": "Usuário registrado com sucesso!"})
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
     if not users_sheet: return jsonify({"success": False, "message": "Erro de conexão com o banco de dados."}), 500
+    
     data = request.json
     email = data.get('email')
     password = data.get('password')
     
-    try:
-        # CORREÇÃO: Usamos find() e verificamos se o resultado não é None
-        cell = users_sheet.find(email, in_column=3)
-        if cell is None:
-             return jsonify({"success": False, "message": "E-mail ou senha incorretos."}), 401
+    # Procura pelo e-mail
+    cell = users_sheet.find(email, in_column=3)
+    
+    # Se a célula não for encontrada (cell is None), o usuário não existe.
+    if cell is None:
+        return jsonify({"success": False, "message": "E-mail ou senha incorretos."}), 401
 
-        user_row = users_sheet.row_values(cell.row)
-        stored_hash = user_row[3]
+    # Se encontrou, pega a linha e verifica a senha
+    user_row = users_sheet.row_values(cell.row)
+    stored_hash = user_row[3]
 
-        if stored_hash and check_password_hash(stored_hash, password):
-            user_data = {'id': user_row[0], 'nome': user_row[1], 'email': user_row[2], 'profile_pic': user_row[4]}
-            user = User(user_data)
-            login_user(user)
-            return jsonify({"success": True, "message": "Login bem-sucedido!"})
-        else:
-            return jsonify({"success": False, "message": "E-mail ou senha incorretos."}), 401
-    except gspread.exceptions.APIError as e:
-        print(f"Erro de API do gspread no login: {e}")
-        return jsonify({"success": False, "message": "Erro ao comunicar com o banco de dados."}), 500
+    if stored_hash and check_password_hash(stored_hash, password):
+        user_data = {'id': user_row[0], 'nome': user_row[1], 'email': user_row[2], 'profile_pic': user_row[4]}
+        user = User(user_data)
+        login_user(user)
+        return jsonify({"success": True, "message": "Login bem-sucedido!"})
+    else:
+        return jsonify({"success": False, "message": "E-mail ou senha incorretos."}), 401
 
 
 @app.route('/api/logout', methods=['POST'])
