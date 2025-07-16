@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, session, url_for
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_dance.contrib.google import make_google_blueprint, google
@@ -82,7 +82,8 @@ def load_user(user_id):
 google_bp = make_google_blueprint(
     client_id=os.environ.get("GOOGLE_CLIENT_ID"),
     client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
-    scope=["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"]
+    scope=["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"],
+    redirect_url="/login/google/authorized" # Define o CAMINHO do callback
 )
 app.register_blueprint(google_bp, url_prefix="/login")
 
@@ -141,7 +142,7 @@ def google_authorized():
         return "ERRO: A variável de ambiente FRONTEND_URL não está configurada no servidor.", 500
 
     if not google.authorized:
-        return redirect(frontend_url + "/login.html?error=auth_failed")
+        return redirect(f"{frontend_url}/login.html?error=auth_failed")
     
     resp = google.get("/oauth2/v2/userinfo")
     if not resp.ok:
@@ -150,6 +151,7 @@ def google_authorized():
     user_info = resp.json()
     user_email = user_info["email"]
 
+    # Lógica para encontrar ou criar o usuário na planilha
     try:
         cell = users_sheet.find(user_email, in_column=3)
         user_data_list = users_sheet.row_values(cell.row)
@@ -162,6 +164,10 @@ def google_authorized():
     user = User(user_data)
     login_user(user)
     
+    # Limpa qualquer 'next' URL antigo da sessão para evitar redirecionamentos indesejados
+    session.pop("next", None)
+    
+    # Redireciona DIRETAMENTE para a página principal do seu frontend
     return redirect(frontend_url)
 
 @app.route('/api/register', methods=['POST'])
