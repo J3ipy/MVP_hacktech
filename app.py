@@ -1,4 +1,3 @@
-# app.py - Versão Final com Autenticação Completa para Deploy no Render
 import os
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
@@ -16,7 +15,7 @@ import qrcode
 # --- Configurações Iniciais ---
 app = Flask(__name__, static_folder='static')
 # Chave secreta para gerenciar sessões. É crucial para a segurança.
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "uma-chave-secreta-longa-e-dificil-de-adivinhar")
 CORS(app, supports_credentials=True)
 
 # --- Configuração do Login ---
@@ -58,11 +57,8 @@ class User(UserMixin):
 def load_user(user_id):
     if not users_sheet: return None
     try:
-        # Encontra o usuário pelo ID na primeira coluna
         user_cell = users_sheet.find(user_id, in_column=1)
-        # Pega todos os dados da linha encontrada
         user_data_list = users_sheet.row_values(user_cell.row)
-        # Monta um dicionário com os dados do usuário
         user_data = {
             'id': user_data_list[0], 'nome': user_data_list[1], 'email': user_data_list[2],
             'password_hash': user_data_list[3], 'profile_pic': user_data_list[4]
@@ -71,7 +67,7 @@ def load_user(user_id):
     except (gspread.exceptions.CellNotFound, IndexError):
         return None
 
-# --- Configuração do Login Social com Google (Flask-Dance) ---
+# --- Configuração do Login Social com Google ---
 google_bp = make_google_blueprint(
     client_id=os.environ.get("GOOGLE_CLIENT_ID"),
     client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
@@ -117,9 +113,10 @@ def gerar_etiqueta():
     qr_code_filename = f"{secure_filename(patrimonio_id)}.png"
     qr_code_filepath = os.path.join(app.static_folder, 'qrcodes', qr_code_filename)
     
-    if not os.path.exists(qr_code_filepath):
-        os.makedirs(os.path.dirname(qr_code_filepath), exist_ok=True)
-        qrcode.make(patrimonio_id).save(qr_code_filepath)
+    if not os.path.exists(os.path.dirname(qr_code_filepath)):
+        os.makedirs(os.path.dirname(qr_code_filepath))
+        
+    qrcode.make(patrimonio_id).save(qr_code_filepath)
     
     return render_template('etiqueta.html', 
                            nome=nome, 
