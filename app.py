@@ -18,31 +18,26 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda92039267
 # Configuração de CORS para permitir cookies da sua URL do Netlify
 CORS(app, origins=[os.environ.get("FRONTEND_URL", "http://localhost:3000")], supports_credentials=True)
 
+
 # --- Configuração do Login ---
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login_page' # Redireciona para a rota de login
+login_manager.login_view = 'login_page'
 
-# --- Configuração do Banco de Dados (Google Sheets) ---
-patrimonio_sheet = None
-users_sheet = None
+# --- Conexão com Google Sheets ---
 try:
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     creds_path = os.path.join(os.path.dirname(__file__), 'credentials.json')
     creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
     client = gspread.authorize(creds)
-    
-    # Tentativa de abrir as duas planilhas
     spreadsheet = client.open("Controle_Patrimonio_IFS")
     patrimonio_sheet = spreadsheet.worksheet("patrimonios")
     users_sheet = spreadsheet.worksheet("users")
-    
-    print("Backend conectado com sucesso às planilhas 'patrimonios' e 'users'!")
-
-except gspread.exceptions.WorksheetNotFound as e:
-    print(f"ERRO CRÍTICO: A aba '{e.args[0]}' não foi encontrada na sua planilha do Google Sheets. Verifique o nome.")
+    print("Backend conectado com sucesso às planilhas!")
 except Exception as e:
     print(f"ERRO CRÍTICO ao conectar com a planilha: {e}")
+    patrimonio_sheet = None
+    users_sheet = None
 
 # --- Configuração do Cloudinary ---
 cloudinary.config(
@@ -64,15 +59,18 @@ def load_user(user_id):
     if not users_sheet: return None
     try:
         user_cell = users_sheet.find(user_id, in_column=1)
+        if not user_cell: return None
         user_data_list = users_sheet.row_values(user_cell.row)
         user_data = {
             'id': user_data_list[0], 'nome': user_data_list[1], 'email': user_data_list[2],
             'password_hash': user_data_list[3], 'profile_pic': user_data_list[4]
         }
         return User(user_data)
-    except (gspread.exceptions.CellNotFound, IndexError):
+    except gspread.exceptions.APIError as e:
+        print(f"Erro de API do gspread ao carregar usuário: {e}")
         return None
 
+# --- Configuração do Login Social com Google ---
 google_bp = make_google_blueprint(
     client_id=os.environ.get("GOOGLE_CLIENT_ID"),
     client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
@@ -81,11 +79,12 @@ google_bp = make_google_blueprint(
 )
 app.register_blueprint(google_bp, url_prefix="/login")
 
+# --- Funções Auxiliares ---
 def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- ROTAS PARA SERVIR O FRONTEND (Arquitetura "Tudo no Render") ---
+# --- Rotas para Servir as Páginas HTML ---
 @app.route('/')
 @login_required
 def index():
@@ -94,11 +93,11 @@ def index():
 @app.route('/patrimonios')
 @login_required
 def patrimonios_page():
-    if not patrimonio_sheet: return "Erro de conexão com a planilha 'patrimonios'. Verifique os logs do servidor.", 500
+    if not patrimonio_sheet: return "Erro de conexão com o banco de dados.", 500
     lista_de_patrimonios = patrimonio_sheet.get_all_records()
     for i, item in enumerate(lista_de_patrimonios):
         item['row_num'] = i + 2
-    return render_template('patrimonios.html', patrimonios=lista_de_patrimonios)
+    return render_template('patrimonios.html', patrimonios=lista_de_patrimonios, current_user=current_user)
 
 @app.route('/login')
 def login_page():
@@ -135,8 +134,7 @@ def google_authorized():
         return "ERRO: A variável de ambiente FRONTEND_URL não está configurada no servidor.", 500
 
     if not google.authorized:
-        # Se falhar, redireciona para a página de login do frontend
-        return redirect(frontend_url + "/login.html")
+        return redirect(frontend_url + "/login.html?error=auth_failed")
     
     resp = google.get("/oauth2/v2/userinfo")
     if not resp.ok:
@@ -145,7 +143,6 @@ def google_authorized():
     user_info = resp.json()
     user_email = user_info["email"]
 
-    # Lógica para encontrar ou criar o usuário na planilha
     try:
         cell = users_sheet.find(user_email, in_column=3)
         user_data_list = users_sheet.row_values(cell.row)
@@ -155,18 +152,14 @@ def google_authorized():
         user_data = {"id": new_id, "nome": user_info.get("name"), "email": user_email, "password_hash": "", "profile_pic": user_info.get("picture"), "provider": "google"}
         users_sheet.append_row(list(user_data.values()))
     
-    # Cria o objeto de usuário e faz o login para criar a sessão
     user = User(user_data)
     login_user(user)
     
-    # Redireciona DIRETAMENTE para a página principal do seu frontend
     return redirect(frontend_url)
-
 
 @app.route('/api/register', methods=['POST'])
 def api_register():
     if not users_sheet: return jsonify({"success": False, "message": "Erro de conexão com o banco de dados."}), 500
-    
     data = request.json
     email = data.get('email')
     nome = data.get('nome')
@@ -175,12 +168,10 @@ def api_register():
     if not all([email, nome, password]):
         return jsonify({"success": False, "message": "Todos os campos são obrigatórios."}), 400
     
-    # Verifica se o e-mail já existe ANTES do bloco try
     cell = users_sheet.find(email, in_column=3)
     if cell is not None:
         return jsonify({"success": False, "message": "Este e-mail já está cadastrado."}), 409
 
-    # Se o e-mail não existe, prossegue para criar o novo usuário
     password_hash = generate_password_hash(password)
     new_id = f"user_{len(users_sheet.get_all_records()) + 1}"
     new_user_row = [new_id, nome, email, password_hash, "", "email"]
@@ -190,19 +181,14 @@ def api_register():
 @app.route('/api/login', methods=['POST'])
 def api_login():
     if not users_sheet: return jsonify({"success": False, "message": "Erro de conexão com o banco de dados."}), 500
-    
     data = request.json
     email = data.get('email')
     password = data.get('password')
     
-    # Procura pelo e-mail
     cell = users_sheet.find(email, in_column=3)
-    
-    # Se a célula não for encontrada (cell is None), o usuário não existe.
     if cell is None:
         return jsonify({"success": False, "message": "E-mail ou senha incorretos."}), 401
 
-    # Se encontrou, pega a linha e verifica a senha
     user_row = users_sheet.row_values(cell.row)
     stored_hash = user_row[3]
 
@@ -214,7 +200,6 @@ def api_login():
     else:
         return jsonify({"success": False, "message": "E-mail ou senha incorretos."}), 401
 
-
 @app.route('/api/logout', methods=['POST'])
 @login_required
 def api_logout():
@@ -224,14 +209,7 @@ def api_logout():
 @app.route('/api/user/status')
 def user_status():
     if current_user.is_authenticated:
-        return jsonify({
-            "isLoggedIn": True,
-            "user": {
-                "nome": current_user.nome,
-                "email": current_user.email,
-                "profile_pic": current_user.profile_pic
-            }
-        })
+        return jsonify({"isLoggedIn": True, "user": {"nome": current_user.nome, "email": current_user.email, "profile_pic": current_user.profile_pic}})
     else:
         return jsonify({"isLoggedIn": False})
 
