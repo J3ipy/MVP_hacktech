@@ -29,7 +29,8 @@ app.config.update(
     SESSION_COOKIE_SAMESITE='None'
 )
 
-CORS(app, supports_credentials=True, origins=[app.config['FRONTEND_URL']])(app, supports_credentials=True, origins=[app.config['FRONTEND_URL']])
+
+CORS(app, supports_credentials=True, origins=[app.config['FRONTEND_URL']])
 
 # --- Login Manager ---
 login_manager = LoginManager(app)
