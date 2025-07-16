@@ -17,7 +17,8 @@ import qrcode
 
 # --- Configurações Iniciais ---
 app = Flask(__name__, static_folder='static')
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+toolkit = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+app.wsgi_app = toolkit
 
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
 app.config.update(
@@ -26,7 +27,8 @@ app.config.update(
     FRONTEND_URL=os.environ.get("FRONTEND_URL", "https://patrimonio-ifs.netlify.app"),
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='None'
+    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_DOMAIN=os.environ.get("COOKIE_DOMAIN", "api-patrimonio-ifs.onrender.com")
 )
 
 
