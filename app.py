@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from flask import (Flask, render_template, request, jsonify,
-                   send_from_directory, redirect, session, url_for, current_app)
+                   send_from_directory, redirect, session, url_for)
 from flask_cors import CORS
 from flask_login import (LoginManager, UserMixin, login_user,
                          logout_user, login_required, current_user)
@@ -17,10 +17,8 @@ import qrcode
 
 # --- Configurações Iniciais ---
 app = Flask(__name__, static_folder='static')
-# Aplicação atrás do proxy da Render / Netlify
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-# Secret e variáveis de domínio
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
 app.config.update(
     SERVER_NAME=os.environ.get("SERVER_NAME", "api-patrimonio-ifs.onrender.com"),
@@ -32,23 +30,19 @@ app.config.update(
     SESSION_COOKIE_DOMAIN=os.environ.get("COOKIE_DOMAIN", ".netlify.app")
 )
 
-# CORS para permitir cookies entre front-end e back-end
-auth_origins = [app.config['FRONTEND_URL']]
-CORS(app, supports_credentials=True, origins=auth_origins)
+CORS(app, supports_credentials=True, origins=[app.config['FRONTEND_URL']])
 
 # --- Login Manager ---
 login_manager = LoginManager(app)
 login_manager.login_view = 'login_page'
 
-@login_manager.user_loader
-def load_user(user_id):
-    try:
-        cell = users_sheet.find(user_id, in_column=1)
-        row = users_sheet.row_values(cell.row)
-        user_data = dict(id=row[0], nome=row[1], email=row[2], profile_pic=row[4])
-        return User(user_data)
-    except Exception:
-        return None
+# --- Modelo de Usuário ---
+class User(UserMixin):
+    def __init__(self, data):
+        self.id = data.get('id')
+        self.nome = data.get('nome')
+        self.email = data.get('email')
+        self.profile_pic = data.get('profile_pic')
 
 # --- Conexão com Google Sheets ---
 try:
@@ -70,33 +64,56 @@ except Exception as e:
     patrimonio_sheet = None
     users_sheet = None
 
-# --- Configuração do Cloudinary ---
-cloudinary.config(
-    cloud_name=os.environ.get('CLOUD_NAME'),
-    api_key=os.environ.get('API_KEY'),
-    api_secret=os.environ.get('API_SECRET')
-)
+# --- User Loader ---
+@login_manager.user_loader
+def load_user(user_id):
+    if not users_sheet:
+        return None
+    try:
+        cell = users_sheet.find(user_id, in_column=1)
+        row = users_sheet.row_values(cell.row)
+        return User({'id': row[0], 'nome': row[1], 'email': row[2], 'profile_pic': row[4]})
+    except Exception:
+        return None
 
-# --- Modelo de Usuário ---
-class User(UserMixin):
-    def __init__(self, data):
-        self.id = data.get('id')
-        self.nome = data.get('nome')
-        self.email = data.get('email')
-        self.profile_pic = data.get('profile_pic')
-
-# --- OAuth Google ---
+# --- OAuth Google Blueprint ---
 google_bp = make_google_blueprint(
     client_id=os.environ.get("GOOGLE_CLIENT_ID"),
     client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
     scope=["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"],
     redirect_url="/login/google/authorized"
 )
+# Callback customizado antes de registrar o blueprint
+@google_bp.route('/google/authorized')
+def google_authorized():
+    frontend = app.config['FRONTEND_URL']
+    if not google.authorized:
+        return redirect(f"{frontend}/login.html?error=auth_failed")
+    resp = google.get('/oauth2/v2/userinfo')
+    if not resp.ok:
+        return redirect(f"{frontend}/login.html?error=fetch_failed")
+    info = resp.json()
+    email = info['email']
+    # Busca ou cria na planilha
+    try:
+        cell = users_sheet.find(email, in_column=3)
+        row = users_sheet.row_values(cell.row)
+        data = {'id': row[0], 'nome': row[1], 'email': row[2], 'profile_pic': row[4]}
+    except Exception:
+        new_id = f'user_{len(users_sheet.get_all_records())+1}'
+        data = {'id': new_id, 'nome': info.get('name'), 'email': email,
+                'profile_pic': info.get('picture')}
+        users_sheet.append_row([data['id'], data['nome'], data['email'], '', data['profile_pic'], 'google'])
+    user = User(data)
+    login_user(user)
+    session.pop('next', None)
+    return redirect(frontend)
+
 app.register_blueprint(google_bp, url_prefix="/login")
 
 # --- Funções Auxiliares ---
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'jpg','jpeg','png'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'jpg', 'jpeg', 'png'}
 
 # --- Rotas HTML ---
 @app.route('/')
@@ -129,47 +146,16 @@ def gerar_etiqueta():
     fn = secure_filename(pid) + '.png'
     path = os.path.join(app.static_folder, 'qrcodes')
     os.makedirs(path, exist_ok=True)
-    full = os.path.join(path, fn)
-    qrcode.make(pid).save(full)
+    qrcode.make(pid).save(os.path.join(path, fn))
     return render_template('etiqueta.html', nome=nome, id=pid, qr_code_url=url_for('static', filename=f'qrcodes/{fn}'))
 
-# --- Callback OAuth e API de Autenticação ---
-@google_bp.route('/google/authorized')
-def google_authorized():
-    frontend = app.config['FRONTEND_URL']
-    # Se não autorizou, retorne ao front com erro
-    if not google.authorized:
-        return redirect(f"{frontend}/login.html?error=auth_failed")
-    # Busca dados do usuário
-    resp = google.get('/oauth2/v2/userinfo')
-    if not resp.ok:
-        return redirect(f"{frontend}/login.html?error=fetch_failed")
-    info = resp.json()
-    email = info['email']
-    # Busca ou cria na planilha
-    try:
-        cell = users_sheet.find(email, in_column=3)
-        row = users_sheet.row_values(cell.row)
-        data = {'id': row[0], 'nome': row[1], 'email': row[2], 'profile_pic': row[4]}
-    except Exception:
-        new_id = f'user_{len(users_sheet.get_all_records())+1}'
-        data = {'id': new_id, 'nome': info.get('name'), 'email': email,
-                'profile_pic': info.get('picture')}
-        users_sheet.append_row([data['id'], data['nome'], data['email'], '', data['profile_pic'], 'google'])
-    # Login no Flask-Login
-    user = User(data)
-    login_user(user)
-    # Limpa next guardado e redireciona para o front
-    session.pop('next', None)
-    return redirect(frontend)
-
-# --- Endpoints de API para login via email/senha ---
+# --- Endpoints de API ---
 @app.route('/api/register', methods=['POST'])
 def api_register():
     if not users_sheet:
         return jsonify(success=False, message="Erro de conexão."), 500
     d = request.json or {}
-    if not all(k in d for k in ('email','nome','password')):
+    if not all(k in d for k in ('email', 'nome', 'password')):
         return jsonify(success=False, message="Campos faltando."), 400
     try:
         if users_sheet.find(d['email'], in_column=3):
@@ -191,8 +177,8 @@ def api_login():
         row = users_sheet.row_values(cell.row)
     except Exception:
         return jsonify(success=False, message="Credenciais inválidas."), 401
-    if check_password_hash(row[3], d.get('password','')):
-        user = User(dict(id=row[0], nome=row[1], email=row[2], profile_pic=row[4]))
+    if check_password_hash(row[3], d.get('password', '')):
+        user = User({'id': row[0], 'nome': row[1], 'email': row[2], 'profile_pic': row[4]})
         login_user(user)
         return jsonify(success=True, message="Login OK"), 200
     return jsonify(success=False, message="Credenciais inválidas."), 401
@@ -207,10 +193,9 @@ def api_logout():
 def user_status():
     if current_user.is_authenticated:
         return jsonify(isLoggedIn=True,
-                       user={'nome':current_user.nome, 'email':current_user.email, 'profile_pic':current_user.profile_pic})
+                       user={'nome': current_user.nome, 'email': current_user.email, 'profile_pic': current_user.profile_pic})
     return jsonify(isLoggedIn=False)
 
-# --- Endpoints de Patrimônio ---
 @app.route('/api/patrimonios', methods=['GET'])
 @login_required
 def get_patrimonios():
@@ -226,7 +211,7 @@ def registrar_patrimonio():
     if not patrimonio_sheet:
         return jsonify(success=False, message="Erro de conexão."), 500
     form = request.form
-    if not all(form.get(k) for k in ('id','nome','categoria','local')):
+    if not all(form.get(k) for k in ('id', 'nome', 'categoria', 'local')):
         return jsonify(success=False, message="Campos obrigatórios faltando."), 400
     foto_url = ''
     if 'foto' in request.files:
@@ -270,7 +255,6 @@ def deletar_patrimonio():
     except Exception as e:
         return jsonify(success=False, message=f"Erro: {e}"), 500
 
-# Service Worker para PWA
 @app.route('/service-worker.js')
 def service_worker():
     return send_from_directory(app.static_folder, 'service-worker.js')
