@@ -131,7 +131,9 @@ def gerar_etiqueta():
 @app.route("/login/google/authorized")
 def google_authorized():
     if not google.authorized:
-        return redirect(url_for("login_page"))
+        # Se falhar, redireciona para a página de login do frontend
+        frontend_login_url = os.environ.get("FRONTEND_URL", "") + "/login.html"
+        return redirect(frontend_login_url)
     
     resp = google.get("/oauth2/v2/userinfo")
     if not resp.ok:
@@ -140,6 +142,7 @@ def google_authorized():
     user_info = resp.json()
     user_email = user_info["email"]
 
+    # Lógica para encontrar ou criar o usuário na planilha (seu código aqui está correto)
     try:
         cell = users_sheet.find(user_email, in_column=3)
         user_data_list = users_sheet.row_values(cell.row)
@@ -149,9 +152,13 @@ def google_authorized():
         user_data = {"id": new_id, "nome": user_info.get("name"), "email": user_email, "password_hash": "", "profile_pic": user_info.get("picture"), "provider": "google"}
         users_sheet.append_row(list(user_data.values()))
     
+    # Cria o objeto de usuário e faz o login para criar a sessão
     user = User(user_data)
     login_user(user)
-    return redirect(url_for('index'))
+    
+    # Redireciona DIRETAMENTE para a página principal do seu frontend
+    frontend_url = os.environ.get("FRONTEND_URL", "/")
+    return redirect(frontend_url)
 
 @app.route('/api/register', methods=['POST'])
 def api_register():
