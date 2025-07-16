@@ -8,12 +8,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from werkzeug.middleware.proxy_fix import ProxyFix
 import cloudinary
 import cloudinary.uploader
 import qrcode
 
 # --- Configurações Iniciais ---
 app = Flask(__name__, static_folder='static')
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
 # Configuração de CORS para permitir cookies da sua URL do Netlify
 CORS(app, origins=[os.environ.get("FRONTEND_URL", "http://localhost:3000")], supports_credentials=True)
@@ -74,8 +77,7 @@ def load_user(user_id):
 google_bp = make_google_blueprint(
     client_id=os.environ.get("GOOGLE_CLIENT_ID"),
     client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
-    scope=["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"],
-    redirect_url="/login/google/authorized"
+    scope=["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"]
 )
 app.register_blueprint(google_bp, url_prefix="/login")
 
