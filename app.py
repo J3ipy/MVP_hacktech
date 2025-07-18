@@ -20,9 +20,9 @@ app = Flask(__name__, static_folder='static')
 # Aplica a correção de proxy para o ambiente da Render
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "uma-chave-secreta-longa-e-dificil-de-adivinhar")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
 
-# 👇👇👇 CONFIGURAÇÃO DE PRODUÇÃO CORRIGIDA E COMPLETA 👇👇👇
+
 app.config.update(
     FRONTEND_URL=os.environ.get("FRONTEND_URL", "https://patrimonio-ifs.netlify.app"),
     SESSION_COOKIE_SECURE=True,
@@ -192,14 +192,23 @@ def get_patrimonios():
 def registrar_patrimonio():
     if not patrimonio_sheet: return jsonify(success=False, message="Erro de conexão."), 500
     form = request.form
+    patrimonio_id = form.get('id')
+    
     if not all(form.get(k) for k in ('id', 'nome', 'categoria', 'local')):
         return jsonify(success=False, message="Campos obrigatórios faltando."), 400
+    
+    cell = patrimonio_sheet.find(patrimonio_id, in_column=1)
+    if cell is not None:
+        return jsonify(success=False, message=f"O ID de patrimônio '{patrimonio_id}' já existe."), 409
+
     foto_url = ''
     if 'foto' in request.files:
         file = request.files['foto']
         if allowed_file(file.filename):
             foto_url = cloudinary.uploader.upload(file)['secure_url']
-    patrimonio_sheet.append_row([form['id'], form['nome'], form['categoria'], form['local'], foto_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+            
+    nova_linha = [form['id'], form['nome'], form['categoria'], form['local'], foto_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
+    patrimonio_sheet.append_row(nova_linha)
     return jsonify(success=True, message="Patrimônio registrado."), 201
 
 @app.route('/api/patrimonio/editar', methods=['POST'])
