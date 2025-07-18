@@ -1,3 +1,4 @@
+# app.py - Versão Final Simplificada para o Hackathon
 import os
 from datetime import datetime
 from flask import (Flask, render_template, request, jsonify,
@@ -15,12 +16,12 @@ import qrcode
 
 # --- Configurações Iniciais ---
 app = Flask(__name__, static_folder='static')
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "1873bsabdjhbakaskda920392678")
-CORS(app) # CORS simples é suficiente agora
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "uma-chave-secreta-longa-e-dificil-de-adivinhar")
+CORS(app) # CORS simples é suficiente para esta arquitetura
 
 # --- Configuração do Login ---
 login_manager = LoginManager(app)
-login_manager.login_view = 'login_page' # Redireciona para a rota de login
+login_manager.login_view = 'login_page' # Redireciona para a rota de login se o utilizador não estiver autenticado
 
 # --- Conexão com Google Sheets ---
 try:
@@ -155,27 +156,11 @@ def logout():
     logout_user()
     return redirect(url_for('login_page'))
 
-@app.route('/api/user/status')
-def user_status():
-    if current_user.is_authenticated:
-        return jsonify(isLoggedIn=True, user={'nome': current_user.nome, 'email': current_user.email, 'profile_pic': current_user.profile_pic})
-    return jsonify(isLoggedIn=False)
-
-@app.route('/api/patrimonios', methods=['GET'])
-@login_required
-def get_patrimonios():
-    if not patrimonio_sheet:
-        return jsonify(error="Erro de conexão."), 500
-    recs = patrimonio_sheet.get_all_records()
-    for i, x in enumerate(recs):
-        x['row_num'] = i + 2
-    return jsonify(recs)
-
-@app.route('/api/registrar', methods=['POST'])
+# --- API de Patrimônios (Protegida) ---
+@app.route('/api/registrar-patrimonio', methods=['POST'])
 @login_required
 def registrar_patrimonio():
-    if not patrimonio_sheet:
-        return jsonify(success=False, message="Erro de conexão."), 500
+    if not patrimonio_sheet: return jsonify(success=False, message="Erro de conexão."), 500
     form = request.form
     if not all(form.get(k) for k in ('id', 'nome', 'categoria', 'local')):
         return jsonify(success=False, message="Campos obrigatórios faltando."), 400
@@ -190,8 +175,7 @@ def registrar_patrimonio():
 @app.route('/api/patrimonio/editar', methods=['POST'])
 @login_required
 def editar_patrimonio():
-    if not patrimonio_sheet:
-        return jsonify(success=False, message="Erro de conexão."), 500
+    if not patrimonio_sheet: return jsonify(success=False, message="Erro de conexão."), 500
     form = request.form
     row_num = int(form.get('row_num', 0))
     try:
@@ -210,17 +194,12 @@ def editar_patrimonio():
 @app.route('/api/patrimonio/deletar', methods=['POST'])
 @login_required
 def deletar_patrimonio():
-    if not patrimonio_sheet:
-        return jsonify(success=False, message="Erro de conexão."), 500
+    if not patrimonio_sheet: return jsonify(success=False, message="Erro de conexão."), 500
     try:
         patrimonio_sheet.delete_rows(int(request.json.get('row_num', 0)))
         return jsonify(success=True, message="Patrimônio deletado."), 200
     except Exception as e:
         return jsonify(success=False, message=f"Erro ao deletar: {e}"), 500
 
-@app.route('/service-worker.js')
-def service_worker():
-    return send_from_directory(app.static_folder, 'service-worker.js')
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
