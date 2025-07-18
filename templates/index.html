@@ -118,7 +118,7 @@
 
     <div class="container">
         <div id="generator-section" class="card">
-            <h2>1. Gerar Nova Etiqueta</h2>
+            <h2>Gerar Nova Etiqueta</h2>
             <div class="form-group">
                 <label for="qr-text">ID ou Texto para o QR Code</label>
                 <input type="text" id="qr-text" placeholder="Ex: 12469207 ou NTB-01-LAB3">
@@ -131,7 +131,7 @@
         </div>
 
         <div id="scanner-section" class="card">
-            <h2>2. Registrar Patrimônio</h2>
+            <h2>Registrar Patrimônio</h2>
             <div id="qr-reader"></div>
             <p style="text-align: center; color: #6c757d; margin-top: 15px; font-weight: 500;">Aponte a câmera para o QR Code</p>
         </div>
@@ -243,9 +243,10 @@
                 statusMessage.className = 'hidden';
 
                 try {
-                    const response = await fetch('/api/registrar', {
+                    const response = await fetch('/api/patrimonio/registrar', {
                         method: 'POST',
-                        body: formData 
+                        body: formData,
+                        credentials: 'include'
                     });
                     const result = await response.json();
 
