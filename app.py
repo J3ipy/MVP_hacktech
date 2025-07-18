@@ -214,21 +214,40 @@ def registrar_patrimonio():
 @app.route('/api/patrimonio/editar', methods=['POST'])
 @login_required
 def editar_patrimonio():
-    if not patrimonio_sheet: return jsonify(success=False, message="Erro de conexão."), 500
+    if not patrimonio_sheet:
+        return jsonify(success=False, message="Erro de conexão."), 500
+
     form = request.form
-    row_num = int(form.get('row_num', 0))
+    # Lê com get() para não abortar automaticamente se faltar algum campo
+    row_num_str = form.get('row_num')
+    nome       = form.get('nome')
+    categoria  = form.get('categoria')
+    local      = form.get('local')
+
+    # Validação básica dos campos obrigatórios
+    if not (row_num_str and nome and categoria and local):
+        return jsonify(success=False, message="Campos obrigatórios faltando."), 400
+
     try:
-        patrimonio_sheet.update_cell(row_num, 2, form['nome'])
-        patrimonio_sheet.update_cell(row_num, 3, form['categoria'])
-        patrimonio_sheet.update_cell(row_num, 4, form['local'])
+        row_num = int(row_num_str)
+        patrimonio_sheet.update_cell(row_num, 2, nome)
+        patrimonio_sheet.update_cell(row_num, 3, categoria)
+        patrimonio_sheet.update_cell(row_num, 4, local)
+
+        # Se vier nova foto, faz o upload e atualiza também a coluna de foto
         if 'foto' in request.files:
             file = request.files['foto']
             if allowed_file(file.filename):
                 url = cloudinary.uploader.upload(file)['secure_url']
                 patrimonio_sheet.update_cell(row_num, 5, url)
+
         return jsonify(success=True, message="Patrimônio atualizado."), 200
+
+    except ValueError:
+        return jsonify(success=False, message="row_num inválido."), 400
     except Exception as e:
         return jsonify(success=False, message=f"Erro ao atualizar: {e}"), 500
+
 
 @app.route('/api/patrimonio/deletar', methods=['POST'])
 @login_required
