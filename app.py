@@ -108,7 +108,6 @@ def register_page():
     return render_template('register.html')
 
 @app.route('/gerar_etiqueta')
-@login_required
 def gerar_etiqueta():
     patrimonio_id = request.args.get('id', 'ERRO')
     nome = request.args.get('nome', 'Item sem nome')
