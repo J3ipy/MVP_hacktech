@@ -1,4 +1,4 @@
-# app.py - Versão Final Simplificada para o Hackathon
+# app.py - Versão Final com Correção de CORS para Produção
 import os
 from datetime import datetime
 from flask import (Flask, render_template, request, jsonify,
@@ -8,6 +8,7 @@ from flask_login import (LoginManager, UserMixin, login_user,
                          logout_user, login_required, current_user)
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import cloudinary
@@ -16,8 +17,21 @@ import qrcode
 
 # --- Configurações Iniciais ---
 app = Flask(__name__, static_folder='static')
+# Aplica a correção de proxy para o ambiente da Render
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "uma-chave-secreta-longa-e-dificil-de-adivinhar")
-CORS(app) # CORS simples é suficiente para esta arquitetura
+
+# 👇👇👇 CONFIGURAÇÃO DE PRODUÇÃO CORRIGIDA E COMPLETA 👇👇👇
+app.config.update(
+    FRONTEND_URL=os.environ.get("FRONTEND_URL", "https://patrimonio-ifs.netlify.app"),
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="None" 
+)
+# CORS configurado para permitir credenciais explicitamente da origem do frontend
+CORS(app, supports_credentials=True, origins=[app.config['FRONTEND_URL']])
+
 
 # --- Configuração do Login ---
 login_manager = LoginManager(app)
@@ -68,7 +82,8 @@ def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- Rotas para Servir as Páginas HTML ---
+# --- Rotas para Servir as Páginas HTML (Fallback) ---
+# Estas rotas são úteis para testes, mas no deploy final, o Netlify serve as páginas.
 @app.route('/')
 @login_required
 def index():
@@ -77,6 +92,7 @@ def index():
 @app.route('/patrimonios')
 @login_required
 def patrimonios_page():
+    # Esta rota agora só é útil para testes locais. O frontend irá usar a API.
     if not patrimonio_sheet: return "Erro de conexão com o banco de dados.", 500
     lista_de_patrimonios = patrimonio_sheet.get_all_records()
     for i, item in enumerate(lista_de_patrimonios):
@@ -155,8 +171,22 @@ def api_login():
 def logout():
     logout_user()
     return redirect(url_for('login_page'))
+    
+@app.route('/api/user/status')
+def user_status():
+    if current_user.is_authenticated:
+        return jsonify(isLoggedIn=True, user={'nome': current_user.nome})
+    return jsonify(isLoggedIn=False)
 
 # --- API de Patrimônios (Protegida) ---
+@app.route('/api/patrimonios', methods=['GET'])
+@login_required
+def get_patrimonios():
+    if not patrimonio_sheet: return jsonify(error="Erro de conexão."), 500
+    recs = patrimonio_sheet.get_all_records()
+    for i, x in enumerate(recs): x['row_num'] = i + 2
+    return jsonify(recs)
+
 @app.route('/api/registrar-patrimonio', methods=['POST'])
 @login_required
 def registrar_patrimonio():
